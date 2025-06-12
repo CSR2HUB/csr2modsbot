@@ -1,16 +1,16 @@
-require('dotenv').config();
-const TelegramBot = require('node-telegram-bot-api');
-const express = require('express');
-const bodyParser = require('body-parser');
-const fs = require('fs');
-const Papa = require('papaparse'); // Add papaparse to package.json
+require('dotenv').config()
+const TelegramBot = require('node-telegram-bot-api')
+const express = require('express')
+const bodyParser = require('body-parser')
+const fs = require('fs')
+const Papa = require('papaparse') // Add papaparse to package.json
 
-const token = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
-const adminChatId = process.env.ADMIN_CHAT_ID;
-const port = process.env.PORT || 8695;
+const token = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN
+const adminChatId = process.env.ADMIN_CHAT_ID
+const port = process.env.PORT || 8695
 
 // Create bot instance
-const bot = new TelegramBot(token, { polling: true });
+const bot = new TelegramBot(token, { polling: true })
 
 // Set persistent Telegram menu commands
 bot.setMyCommands([
@@ -20,50 +20,50 @@ bot.setMyCommands([
   { command: 'search', description: 'Search for specific cars' },
   { command: 'brands', description: 'Browse by car brands' },
   { command: 'help', description: 'Customer support & FAQ' }
-]).catch(console.error);
+]).catch(console.error)
 
-const app = express();
-app.use(bodyParser.json());
+const app = express()
+app.use(bodyParser.json())
 
 // User sessions to store cart data
-const userSessions = new Map();
+const userSessions = new Map()
 
 // Cars database - will be loaded from CSV
-let carsDatabase = new Map();
-let carsByBrand = new Map();
-let carCategories = {};
+let carsDatabase = new Map()
+const carsByBrand = new Map()
+let carCategories = {}
 
 // Load cars from CSV file
-async function loadCarsDatabase() {
+async function loadCarsDatabase () {
   try {
-    console.log('Loading cars database from CSV...');
-    const csvContent = fs.readFileSync('Gold Latest 116  Sheet1 5.csv', 'utf8');
-    
+    console.log('Loading cars database from CSV...')
+    const csvContent = fs.readFileSync('Gold Latest 116  Sheet1 5.csv', 'utf8')
+
     const parsed = Papa.parse(csvContent, {
       header: true,
       dynamicTyping: true,
       skipEmptyLines: true
-    });
+    })
 
-    const uniqueCars = new Map();
-    const brandCount = new Map();
+    const uniqueCars = new Map()
+    const brandCount = new Map()
 
     parsed.data.forEach((row, index) => {
       if (row.Handle && row.Title) {
-        const carId = row.Handle;
-        
+        const carId = row.Handle
+
         if (!uniqueCars.has(carId)) {
           // Extract brand from title
-          const titleParts = row.Title.split(' ');
-          let brand = 'Other';
+          const titleParts = row.Title.split(' ')
+          let brand = 'Other'
           if (titleParts.length >= 3 && titleParts[0] === 'CSR2') {
-            brand = titleParts[1];
+            brand = titleParts[1]
           }
 
           const car = {
             id: carId,
             name: row.Title,
-            brand: brand,
+            brand,
             price: row['Price / United States'] || 10,
             description: `Premium CSR2 car - ${row.Title}. Get this amazing vehicle added to your garage!`,
             image: row['Image Src'] || 'csr2-car-default.webp',
@@ -71,7 +71,7 @@ async function loadCarsDatabase() {
             tags: row.Tags || '',
             published: row.Published === 'TRUE',
             variants: []
-          };
+          }
 
           // Add variant if exists
           if (row['Option1 Value']) {
@@ -79,13 +79,13 @@ async function loadCarsDatabase() {
               color: row['Option1 Value'],
               price: row['Price / United States'] || 10,
               sku: row['Variant SKU'] || ''
-            });
+            })
           }
 
-          uniqueCars.set(carId, car);
-          
+          uniqueCars.set(carId, car)
+
           // Count by brand
-          brandCount.set(brand, (brandCount.get(brand) || 0) + 1);
+          brandCount.set(brand, (brandCount.get(brand) || 0) + 1)
         } else {
           // Add additional variant to existing car
           if (row['Option1 Value']) {
@@ -93,71 +93,71 @@ async function loadCarsDatabase() {
               color: row['Option1 Value'],
               price: row['Price / United States'] || 10,
               sku: row['Variant SKU'] || ''
-            });
+            })
           }
         }
       }
-    });
+    })
 
     // Store in global variables
-    carsDatabase = uniqueCars;
-    
+    carsDatabase = uniqueCars
+
     // Organize by brands
-    carsByBrand.clear();
+    carsByBrand.clear()
     Array.from(uniqueCars.values()).forEach(car => {
       if (!carsByBrand.has(car.brand)) {
-        carsByBrand.set(car.brand, []);
+        carsByBrand.set(car.brand, [])
       }
-      carsByBrand.get(car.brand).push(car);
-    });
+      carsByBrand.get(car.brand).push(car)
+    })
 
     // Create categories
     carCategories = {
-      luxury: Array.from(uniqueCars.values()).filter(car => 
+      luxury: Array.from(uniqueCars.values()).filter(car =>
         ['Bugatti', 'McLaren', 'Lamborghini', 'Ferrari', 'Koenigsegg', 'Pagani', 'Rolls-Royce'].includes(car.brand)
       ),
-      sports: Array.from(uniqueCars.values()).filter(car => 
+      sports: Array.from(uniqueCars.values()).filter(car =>
         ['Porsche', 'BMW', 'Mercedes-Benz', 'Audi', 'Aston'].includes(car.brand)
       ),
-      american: Array.from(uniqueCars.values()).filter(car => 
+      american: Array.from(uniqueCars.values()).filter(car =>
         ['Ford', 'Chevrolet', 'Dodge', 'Cadillac', 'Hennessey'].includes(car.brand)
       ),
-      japanese: Array.from(uniqueCars.values()).filter(car => 
+      japanese: Array.from(uniqueCars.values()).filter(car =>
         ['Nissan', 'Toyota', 'Honda', 'Mazda', 'Subaru', 'Lexus', 'Acura'].includes(car.brand)
       ),
       all: Array.from(uniqueCars.values())
-    };
+    }
 
-    console.log(`✅ Loaded ${uniqueCars.size} unique cars from ${parsed.data.length} rows`);
-    console.log(`✅ Found ${carsByBrand.size} brands`);
-    console.log(`✅ Categories: Luxury (${carCategories.luxury.length}), Sports (${carCategories.sports.length}), American (${carCategories.american.length}), Japanese (${carCategories.japanese.length})`);
-    
-    return true;
+    console.log(`✅ Loaded ${uniqueCars.size} unique cars from ${parsed.data.length} rows`)
+    console.log(`✅ Found ${carsByBrand.size} brands`)
+    console.log(`✅ Categories: Luxury (${carCategories.luxury.length}), Sports (${carCategories.sports.length}), American (${carCategories.american.length}), Japanese (${carCategories.japanese.length})`)
+
+    return true
   } catch (error) {
-    console.error('❌ Failed to load cars database:', error.message);
-    console.log('📝 Using fallback static car data...');
-    createFallbackCarData();
-    return false;
+    console.error('❌ Failed to load cars database:', error.message)
+    console.log('📝 Using fallback static car data...')
+    createFallbackCarData()
+    return false
   }
 }
 
 // Fallback car data if CSV loading fails
-function createFallbackCarData() {
+function createFallbackCarData () {
   const fallbackCars = [
     { id: 'bugatti-chiron', name: 'CSR2 Bugatti Chiron', brand: 'Bugatti', price: 15, description: 'Ultimate hypercar', image: 'csr2-car-bugatti.webp' },
     { id: 'mclaren-720s', name: 'CSR2 McLaren 720S', brand: 'McLaren', price: 12, description: 'British supercar', image: 'csr2-car-mclaren.webp' },
     { id: 'lamborghini-huracan', name: 'CSR2 Lamborghini Huracán', brand: 'Lamborghini', price: 14, description: 'Italian beast', image: 'csr2-car-lambo.webp' }
-  ];
+  ]
 
-  carsDatabase = new Map();
+  carsDatabase = new Map()
   fallbackCars.forEach(car => {
-    carsDatabase.set(car.id, car);
-  });
+    carsDatabase.set(car.id, car)
+  })
 
   carCategories = {
     luxury: fallbackCars,
     all: fallbackCars
-  };
+  }
 }
 
 // CSR2 MODS STORE Menu data with real cars integration
@@ -168,13 +168,13 @@ const menuCategories = {
     getCars: () => carCategories.luxury?.slice(0, 20) || []
   },
   csr2_cars_sports: {
-    name: '🏁 SPORTS CARS', 
+    name: '🏁 SPORTS CARS',
     emoji: '🏁',
     getCars: () => carCategories.sports?.slice(0, 20) || []
   },
   csr2_cars_american: {
     name: '🇺🇸 AMERICAN CARS',
-    emoji: '🇺🇸', 
+    emoji: '🇺🇸',
     getCars: () => carCategories.american?.slice(0, 20) || []
   },
   csr2_cars_japanese: {
@@ -265,22 +265,22 @@ const menuCategories = {
       { id: 'custom_account', name: 'Custom Account Build', price: 199.99, description: 'Custom account built to your specs', image: 'csr2-account-custom.webp' }
     ]
   }
-};
+}
 
 // Helper functions
-function getUserSession(userId) {
+function getUserSession (userId) {
   if (!userSessions.has(userId)) {
     userSessions.set(userId, {
       cart: [],
       currentCategory: null,
       orderHistory: [],
       searchResults: []
-    });
+    })
   }
-  return userSessions.get(userId);
+  return userSessions.get(userId)
 }
 
-function getMainMenuKeyboard() {
+function getMainMenuKeyboard () {
   return {
     reply_markup: {
       inline_keyboard: [
@@ -314,63 +314,63 @@ function getMainMenuKeyboard() {
         ]
       ]
     }
-  };
+  }
 }
 
-function getCategoryKeyboard(categoryKey, page = 0) {
-  const category = menuCategories[categoryKey];
-  const keyboard = [];
-  const itemsPerPage = 10;
-  
+function getCategoryKeyboard (categoryKey, page = 0) {
+  const category = menuCategories[categoryKey]
+  const keyboard = []
+  const itemsPerPage = 10
+
   if (category.getCars) {
     // Handle car categories
-    const cars = category.getCars();
-    const startIndex = page * itemsPerPage;
-    const endIndex = Math.min(startIndex + itemsPerPage, cars.length);
-    const pageCars = cars.slice(startIndex, endIndex);
-    
+    const cars = category.getCars()
+    const startIndex = page * itemsPerPage
+    const endIndex = Math.min(startIndex + itemsPerPage, cars.length)
+    const pageCars = cars.slice(startIndex, endIndex)
+
     pageCars.forEach(car => {
       keyboard.push([{
         text: `${car.name} - ${car.price}`,
         callback_data: `car_${car.id}`
-      }]);
-    });
-    
+      }])
+    })
+
     // Pagination controls
-    const paginationRow = [];
+    const paginationRow = []
     if (page > 0) {
-      paginationRow.push({ text: '⬅️ Previous', callback_data: `page_${categoryKey}_${page - 1}` });
+      paginationRow.push({ text: '⬅️ Previous', callback_data: `page_${categoryKey}_${page - 1}` })
     }
     if (endIndex < cars.length) {
-      paginationRow.push({ text: 'Next ➡️', callback_data: `page_${categoryKey}_${page + 1}` });
+      paginationRow.push({ text: 'Next ➡️', callback_data: `page_${categoryKey}_${page + 1}` })
     }
     if (paginationRow.length > 0) {
-      keyboard.push(paginationRow);
+      keyboard.push(paginationRow)
     }
-    
+
     keyboard.push([
       { text: `📊 Showing ${startIndex + 1}-${endIndex} of ${cars.length}`, callback_data: 'noop' }
-    ]);
+    ])
   } else if (category.items) {
     // Handle other categories with static items
     category.items.forEach(item => {
-      const priceText = typeof item.price === 'number' ? `${item.price}` : item.price;
+      const priceText = typeof item.price === 'number' ? `${item.price}` : item.price
       keyboard.push([{
         text: `${item.name} - ${priceText}`,
         callback_data: `item_${item.id}`
-      }]);
-    });
+      }])
+    })
   }
-  
+
   keyboard.push([
     { text: '⬅️ Back to Menu', callback_data: 'main_menu' },
     { text: '🛒 View Cart', callback_data: 'view_cart' }
-  ]);
-  
-  return { reply_markup: { inline_keyboard: keyboard } };
+  ])
+
+  return { reply_markup: { inline_keyboard: keyboard } }
 }
 
-function getCarKeyboard(carId) {
+function getCarKeyboard (carId) {
   return {
     reply_markup: {
       inline_keyboard: [
@@ -383,10 +383,10 @@ function getCarKeyboard(carId) {
         ]
       ]
     }
-  };
+  }
 }
 
-function getItemKeyboard(itemId) {
+function getItemKeyboard (itemId) {
   return {
     reply_markup: {
       inline_keyboard: [
@@ -399,10 +399,10 @@ function getItemKeyboard(itemId) {
         ]
       ]
     }
-  };
+  }
 }
 
-function getCartKeyboard() {
+function getCartKeyboard () {
   return {
     reply_markup: {
       inline_keyboard: [
@@ -416,76 +416,76 @@ function getCartKeyboard() {
         ]
       ]
     }
-  };
+  }
 }
 
-function findItemById(itemId) {
+function findItemById (itemId) {
   // Check if it's a car
   if (carsDatabase.has(itemId)) {
-    return { item: carsDatabase.get(itemId), category: 'cars', type: 'car' };
+    return { item: carsDatabase.get(itemId), category: 'cars', type: 'car' }
   }
-  
+
   // Check other categories
   for (const categoryKey in menuCategories) {
-    const category = menuCategories[categoryKey];
+    const category = menuCategories[categoryKey]
     if (category.items) {
-      const item = category.items.find(item => item.id === itemId);
-      if (item) return { item, category: categoryKey, type: 'item' };
+      const item = category.items.find(item => item.id === itemId)
+      if (item) return { item, category: categoryKey, type: 'item' }
     }
   }
-  return null;
+  return null
 }
 
-function searchCars(query) {
-  const searchTerm = query.toLowerCase();
-  const results = [];
-  
+function searchCars (query) {
+  const searchTerm = query.toLowerCase()
+  const results = []
+
   for (const car of carsDatabase.values()) {
-    if (car.name.toLowerCase().includes(searchTerm) || 
+    if (car.name.toLowerCase().includes(searchTerm) ||
         car.brand.toLowerCase().includes(searchTerm) ||
         car.tags.toLowerCase().includes(searchTerm)) {
-      results.push(car);
+      results.push(car)
     }
   }
-  
-  return results.slice(0, 20); // Limit to 20 results
+
+  return results.slice(0, 20) // Limit to 20 results
 }
 
-function formatCart(cart) {
+function formatCart (cart) {
   if (cart.length === 0) {
-    return '🛒 Your cart is empty\n\n🏎️ Start shopping for CSR2 cars, mods, and services!\n\nVisit our categories to find what you need.';
+    return '🛒 Your cart is empty\n\n🏎️ Start shopping for CSR2 cars, mods, and services!\n\nVisit our categories to find what you need.'
   }
-  
-  let message = '🛒 Your CSR2 MODS Cart:\n\n';
-  let total = 0;
-  let hasContactItems = false;
-  
+
+  let message = '🛒 Your CSR2 MODS Cart:\n\n'
+  let total = 0
+  let hasContactItems = false
+
   cart.forEach((item, index) => {
-    const priceText = typeof item.price === 'number' ? `${item.price.toFixed(2)}` : item.price;
-    message += `${index + 1}. ${item.name}\n`;
-    message += `   💰 ${priceText}\n\n`;
-    
+    const priceText = typeof item.price === 'number' ? `${item.price.toFixed(2)}` : item.price
+    message += `${index + 1}. ${item.name}\n`
+    message += `   💰 ${priceText}\n\n`
+
     if (typeof item.price === 'number') {
-      total += item.price;
+      total += item.price
     } else {
-      hasContactItems = true;
+      hasContactItems = true
     }
-  });
-  
+  })
+
   if (total > 0) {
-    message += `💳 Subtotal: ${total.toFixed(2)}\n`;
+    message += `💳 Subtotal: ${total.toFixed(2)}\n`
   }
   if (hasContactItems) {
-    message += `📞 Some items require contact for pricing`;
+    message += '📞 Some items require contact for pricing'
   }
-  
-  return message;
+
+  return message
 }
 
 // Bot commands
 bot.onText(/\/start/, (msg) => {
-  const chatId = msg.chat.id;
-  const carCount = carsDatabase.size;
+  const chatId = msg.chat.id
+  const carCount = carsDatabase.size
   const welcomeMessage = `
 🏎️ Welcome to CSR2 MODS STORE!
 
@@ -503,47 +503,47 @@ We have ${carCount}+ premium CSR2 cars and services available:
 👑 VIP memberships & services
 
 Select a category to start shopping:
-  `;
-  
-  bot.sendMessage(chatId, welcomeMessage, getMainMenuKeyboard());
-});
+  `
+
+  bot.sendMessage(chatId, welcomeMessage, getMainMenuKeyboard())
+})
 
 bot.onText(/\/menu/, (msg) => {
-  const chatId = msg.chat.id;
-  bot.sendMessage(chatId, '🏎️ CSR2 MODS STORE - Choose a category:', getMainMenuKeyboard());
-});
+  const chatId = msg.chat.id
+  bot.sendMessage(chatId, '🏎️ CSR2 MODS STORE - Choose a category:', getMainMenuKeyboard())
+})
 
 bot.onText(/\/cart/, (msg) => {
-  const chatId = msg.chat.id;
-  const session = getUserSession(msg.from.id);
-  const cartMessage = formatCart(session.cart);
-  
-  bot.sendMessage(chatId, cartMessage, getCartKeyboard());
-});
+  const chatId = msg.chat.id
+  const session = getUserSession(msg.from.id)
+  const cartMessage = formatCart(session.cart)
+
+  bot.sendMessage(chatId, cartMessage, getCartKeyboard())
+})
 
 bot.onText(/\/search (.+)/, (msg, match) => {
-  const chatId = msg.chat.id;
-  const searchQuery = match[1];
-  const session = getUserSession(msg.from.id);
-  
-  const results = searchCars(searchQuery);
-  
+  const chatId = msg.chat.id
+  const searchQuery = match[1]
+  const session = getUserSession(msg.from.id)
+
+  const results = searchCars(searchQuery)
+
   if (results.length === 0) {
-    bot.sendMessage(chatId, `🔍 No cars found for "${searchQuery}"\n\nTry searching for:\n• Brand names (Bugatti, McLaren, etc.)\n• Car models (Chiron, 720S, etc.)\n• General terms (supercar, sports, etc.)`);
-    return;
+    bot.sendMessage(chatId, `🔍 No cars found for "${searchQuery}"\n\nTry searching for:\n• Brand names (Bugatti, McLaren, etc.)\n• Car models (Chiron, 720S, etc.)\n• General terms (supercar, sports, etc.)`)
+    return
   }
-  
-  session.searchResults = results;
-  
-  let message = `🔍 Found ${results.length} cars for "${searchQuery}":\n\n`;
+
+  session.searchResults = results
+
+  let message = `🔍 Found ${results.length} cars for "${searchQuery}":\n\n`
   results.slice(0, 10).forEach((car, index) => {
-    message += `${index + 1}. ${car.name} - ${car.price}\n`;
-  });
-  
+    message += `${index + 1}. ${car.name} - ${car.price}\n`
+  })
+
   if (results.length > 10) {
-    message += `\n... and ${results.length - 10} more cars`;
+    message += `\n... and ${results.length - 10} more cars`
   }
-  
+
   const keyboard = {
     reply_markup: {
       inline_keyboard: results.slice(0, 5).map(car => ([{
@@ -554,22 +554,22 @@ bot.onText(/\/search (.+)/, (msg, match) => {
         { text: '⬅️ Back to Menu', callback_data: 'main_menu' }
       ]])
     }
-  };
-  
-  bot.sendMessage(chatId, message, keyboard);
-});
+  }
+
+  bot.sendMessage(chatId, message, keyboard)
+})
 
 bot.onText(/\/brands/, (msg) => {
-  const chatId = msg.chat.id;
-  const brands = Array.from(carsByBrand.keys()).sort();
-  const topBrands = brands.slice(0, 20);
-  
-  let message = '🏭 Available Car Brands:\n\n';
+  const chatId = msg.chat.id
+  const brands = Array.from(carsByBrand.keys()).sort()
+  const topBrands = brands.slice(0, 20)
+
+  let message = '🏭 Available Car Brands:\n\n'
   topBrands.forEach((brand, index) => {
-    const count = carsByBrand.get(brand).length;
-    message += `${index + 1}. ${brand} (${count} cars)\n`;
-  });
-  
+    const count = carsByBrand.get(brand).length
+    message += `${index + 1}. ${brand} (${count} cars)\n`
+  })
+
   const keyboard = {
     reply_markup: {
       inline_keyboard: [
@@ -579,13 +579,13 @@ bot.onText(/\/brands/, (msg) => {
         ]
       ]
     }
-  };
-  
-  bot.sendMessage(chatId, message, keyboard);
-});
+  }
+
+  bot.sendMessage(chatId, message, keyboard)
+})
 
 bot.onText(/\/help/, (msg) => {
-  const chatId = msg.chat.id;
+  const chatId = msg.chat.id
   const helpMessage = `
 🤖 CSR2 MODS STORE Bot Help
 
@@ -612,25 +612,25 @@ Available commands:
 ✅ Money-back guarantee
 
 Need help? Use the Support button in the menu!
-  `;
-  
-  bot.sendMessage(chatId, helpMessage);
-});
+  `
+
+  bot.sendMessage(chatId, helpMessage)
+})
 
 // Handle callback queries
 bot.on('callback_query', (query) => {
-  const chatId = query.message.chat.id;
-  const messageId = query.message.message_id;
-  const data = query.data;
-  const userId = query.from.id;
-  const session = getUserSession(userId);
-  
+  const chatId = query.message.chat.id
+  const messageId = query.message.message_id
+  const data = query.data
+  const userId = query.from.id
+  const session = getUserSession(userId)
+
   // Handle pagination
   if (data.startsWith('page_')) {
-    const [, categoryKey, pageStr] = data.split('_');
-    const page = parseInt(pageStr);
-    const category = menuCategories[categoryKey];
-    
+    const [, categoryKey, pageStr] = data.split('_')
+    const page = parseInt(pageStr)
+    const category = menuCategories[categoryKey]
+
     bot.editMessageText(
       `${category.emoji} ${category.name}\n\nChoose a car:`,
       {
@@ -638,15 +638,12 @@ bot.on('callback_query', (query) => {
         message_id: messageId,
         ...getCategoryKeyboard(categoryKey, page)
       }
-    );
-  }
-  
-  // Handle category selection  
-  else if (data.startsWith('category_')) {
-    const categoryKey = data.replace('category_', '');
-    session.currentCategory = categoryKey;
-    const category = menuCategories[categoryKey];
-    
+    )
+  } else if (data.startsWith('category_')) { // Handle category selection
+    const categoryKey = data.replace('category_', '')
+    session.currentCategory = categoryKey
+    const category = menuCategories[categoryKey]
+
     bot.editMessageText(
       `${category.emoji} ${category.name}\n\nChoose an item:`,
       {
@@ -654,14 +651,11 @@ bot.on('callback_query', (query) => {
         message_id: messageId,
         ...getCategoryKeyboard(categoryKey)
       }
-    );
-  }
-  
-  // Handle car selection
-  else if (data.startsWith('car_')) {
-    const carId = data.replace('car_', '');
-    const car = carsDatabase.get(carId);
-    
+    )
+  } else if (data.startsWith('car_')) { // Handle car selection
+    const carId = data.replace('car_', '')
+    const car = carsDatabase.get(carId)
+
     if (car) {
       const carMessage = `
 🏎️ ${car.name}
@@ -677,41 +671,35 @@ bot.on('callback_query', (query) => {
 ${car.variants && car.variants.length > 0 ? `\n🎨 Available colors: ${car.variants.map(v => v.color).join(', ')}` : ''}
 
 Would you like to add this car to your cart?
-      `;
-      
+      `
+
       bot.editMessageText(carMessage, {
         chat_id: chatId,
         message_id: messageId,
         ...getCarKeyboard(carId)
-      });
+      })
     }
-  }
-  
-  // Handle add car to cart
-  else if (data.startsWith('add_car_')) {
-    const carId = data.replace('add_car_', '');
-    const car = carsDatabase.get(carId);
-    
+  } else if (data.startsWith('add_car_')) { // Handle add car to cart
+    const carId = data.replace('add_car_', '')
+    const car = carsDatabase.get(carId)
+
     if (car) {
-      session.cart.push(car);
-      
+      session.cart.push(car)
+
       bot.answerCallbackQuery(query.id, {
         text: `✅ ${car.name} added to cart!`,
         show_alert: true
-      });
-      
+      })
+
       // Show updated cart
-      const cartMessage = formatCart(session.cart);
+      const cartMessage = formatCart(session.cart)
       bot.editMessageText(cartMessage, {
         chat_id: chatId,
         message_id: messageId,
         ...getCartKeyboard()
-      });
+      })
     }
-  }
-  
-  // Handle search cars
-  else if (data === 'search_cars') {
+  } else if (data === 'search_cars') { // Handle search cars
     bot.editMessageText(
       '🔍 Search for CSR2 Cars\n\nSend me a search term like:\n• Brand name (Bugatti, McLaren)\n• Car model (Chiron, 720S)\n• Type (supercar, sports car)\n\nExample: /search Bugatti',
       {
@@ -723,17 +711,14 @@ Would you like to add this car to your cart?
           ]
         }
       }
-    );
-  }
-  
-  // Handle item selection (non-car items)
-  else if (data.startsWith('item_')) {
-    const itemId = data.replace('item_', '');
-    const result = findItemById(itemId);
-    
+    )
+  } else if (data.startsWith('item_')) { // Handle item selection (non-car items)
+    const itemId = data.replace('item_', '')
+    const result = findItemById(itemId)
+
     if (result) {
-      const { item } = result;
-      const priceText = typeof item.price === 'number' ? `${item.price.toFixed(2)}` : 'Contact for pricing';
+      const { item } = result
+      const priceText = typeof item.price === 'number' ? `${item.price.toFixed(2)}` : 'Contact for pricing'
       const itemMessage = `
 🎮 ${item.name}
 
@@ -745,134 +730,116 @@ Would you like to add this car to your cart?
 🔒 Safe & secure transaction
 
 ${typeof item.price === 'string' ? '📞 Contact support for custom pricing' : 'Would you like to add this to your cart?'}
-      `;
-      
+      `
+
       bot.editMessageText(itemMessage, {
         chat_id: chatId,
         message_id: messageId,
         ...getItemKeyboard(itemId)
-      });
+      })
     }
-  }
-  
-  // Handle add item to cart (non-car items)
-  else if (data.startsWith('add_') && !data.startsWith('add_car_')) {
-    const itemId = data.replace('add_', '');
-    const result = findItemById(itemId);
-    
+  } else if (data.startsWith('add_') && !data.startsWith('add_car_')) { // Handle add item to cart (non-car items)
+    const itemId = data.replace('add_', '')
+    const result = findItemById(itemId)
+
     if (result) {
-      const { item } = result;
-      session.cart.push(item);
-      
+      const { item } = result
+      session.cart.push(item)
+
       bot.answerCallbackQuery(query.id, {
         text: `✅ ${item.name} added to cart!`,
         show_alert: true
-      });
-      
+      })
+
       // Show updated cart
-      const cartMessage = formatCart(session.cart);
+      const cartMessage = formatCart(session.cart)
       bot.editMessageText(cartMessage, {
         chat_id: chatId,
         message_id: messageId,
         ...getCartKeyboard()
-      });
+      })
     }
-  }
-  
-  // Handle main menu
-  else if (data === 'main_menu') {
+  } else if (data === 'main_menu') { // Handle main menu
     bot.editMessageText('🏎️ CSR2 MODS STORE - Choose a category:', {
       chat_id: chatId,
       message_id: messageId,
       ...getMainMenuKeyboard()
-    });
-  }
-  
-  // Handle back to category
-  else if (data === 'back_to_category') {
+    })
+  } else if (data === 'back_to_category') { // Handle back to category
     if (session.currentCategory) {
-      const category = menuCategories[session.currentCategory];
+      const category = menuCategories[session.currentCategory]
       bot.editMessageText(`${category.emoji} ${category.name}\n\nChoose an item:`, {
         chat_id: chatId,
         message_id: messageId,
         ...getCategoryKeyboard(session.currentCategory)
-      });
+      })
     } else {
       bot.editMessageText('🏎️ CSR2 MODS STORE - Choose a category:', {
         chat_id: chatId,
         message_id: messageId,
         ...getMainMenuKeyboard()
-      });
+      })
     }
-  }
-  
-  // Handle view cart
-  else if (data === 'view_cart') {
-    const cartMessage = formatCart(session.cart);
+  } else if (data === 'view_cart') { // Handle view cart
+    const cartMessage = formatCart(session.cart)
     bot.editMessageText(cartMessage, {
       chat_id: chatId,
       message_id: messageId,
       ...getCartKeyboard()
-    });
-  }
-  
-  // Handle clear cart
-  else if (data === 'clear_cart') {
-    session.cart = [];
+    })
+  } else if (data === 'clear_cart') { // Handle clear cart
+    session.cart = []
     bot.answerCallbackQuery(query.id, {
       text: '🗑️ Cart cleared!',
       show_alert: true
-    });
-    
-    const cartMessage = formatCart(session.cart);
+    })
+
+    const cartMessage = formatCart(session.cart)
     bot.editMessageText(cartMessage, {
       chat_id: chatId,
       message_id: messageId,
       ...getCartKeyboard()
-    });
-  }
-  
-  // Handle checkout
-  else if (data === 'checkout') {
+    })
+  } else if (data === 'checkout') { // Handle checkout
     if (session.cart.length === 0) {
       bot.answerCallbackQuery(query.id, {
         text: '🛒 Your cart is empty!',
         show_alert: true
-      });
-      return;
+      })
+      return
     }
-    
+
     // Calculate total
-    const fixedPriceItems = session.cart.filter(item => typeof item.price === 'number');
-    const contactItems = session.cart.filter(item => typeof item.price === 'string');
-    const total = fixedPriceItems.reduce((sum, item) => sum + item.price, 0);
-    
+    const fixedPriceItems = session.cart.filter(item => typeof item.price === 'number')
+    const contactItems = session.cart.filter(item => typeof item.price === 'string')
+    const total = fixedPriceItems.reduce((sum, item) => sum + item.price, 0)
+
     // Create order summary
-    let orderSummary = `🎮 CSR2 MODS ORDER\n\n`;
-    orderSummary += `👤 Customer: ${query.from.first_name} ${query.from.last_name || ''}\n`;
-    orderSummary += `📱 Username: @${query.from.username || 'N/A'}\n`;
-    orderSummary += `🆔 User ID: ${query.from.id}\n\n`;
-    orderSummary += `🛒 Items Ordered:\n`;
-    
+    let orderSummary = '🎮 CSR2 MODS ORDER\n\n'
+    orderSummary += `👤 Customer: ${query.from.first_name} ${query.from.last_name || ''}\n`
+    orderSummary += `📱 Username: @${query.from.username || 'N/A'}\n`
+    orderSummary += `🆔 User ID: ${query.from.id}\n\n`
+    orderSummary += '🛒 Items Ordered:\n'
+
     session.cart.forEach((item, index) => {
-      const priceText = typeof item.price === 'number' ? `${item.price.toFixed(2)}` : item.price;
-      orderSummary += `${index + 1}. ${item.name} - ${priceText}\n`;
-    });
-    
+      const priceText = typeof item.price === 'number' ? `${item.price.toFixed(2)}` : item.price
+      orderSummary += `${index + 1}. ${item.name} - ${priceText}\n`
+    })
+
     if (total > 0) {
-      orderSummary += `\n💳 Fixed Price Total: ${total.toFixed(2)}\n`;
+      orderSummary += `\n💳 Fixed Price Total: ${total.toFixed(2)}\n`
     }
     if (contactItems.length > 0) {
-      orderSummary += `📞 Contact items: ${contactItems.length}\n`;
+      orderSummary += `📞 Contact items: ${contactItems.length}\n`
     }
-    orderSummary += `📅 Date: ${new Date().toLocaleString()}\n`;
-    orderSummary += `🌐 Store: csr2mod.com`;
-    
+    orderSummary += `📅 Date: ${new Date().toLocaleString()}\n`
+    orderSummary += '🌐 Store: csr2mod.com'
+
     // Send order to admin
     if (adminChatId) {
-      bot.sendMessage(adminChatId, `🔔 NEW CSR2 ORDER!\n\n${orderSummary}`);
+      bot.sendMessage(adminChatId, `🔔 NEW CSR2 ORDER!\n\n${orderSummary}`)
     }
-    
+
     // Send confirmation to user
     const confirmationMessage = `
 ✅ Order Confirmed!
@@ -892,8 +859,8 @@ Our support team will send you secure payment details shortly.
 
 Order ID: #CSR${Date.now()}
 🌐 csr2mod.com
-    `;
-    
+    `
+
     bot.editMessageText(confirmationMessage, {
       chat_id: chatId,
       message_id: messageId,
@@ -905,21 +872,18 @@ Order ID: #CSR${Date.now()}
           ]
         ]
       }
-    });
-    
+    })
+
     // Clear cart and save to order history
     session.orderHistory.push({
       items: [...session.cart],
-      total: total,
+      total,
       contactItems: contactItems.length,
       date: new Date().toISOString(),
       orderId: `CSR${Date.now()}`
-    });
-    session.cart = [];
-  }
-  
-  // Handle support
-  else if (data === 'support') {
+    })
+    session.cart = []
+  } else if (data === 'support') { // Handle support
     const supportMessage = `
 💬 CSR2 MODS STORE Support
 
@@ -945,8 +909,8 @@ Order ID: #CSR${Date.now()}
 ✅ Quick delivery
 ✅ Professional support
 ✅ Money-back guarantee
-    `;
-    
+    `
+
     bot.editMessageText(supportMessage, {
       chat_id: chatId,
       message_id: messageId,
@@ -961,65 +925,62 @@ Order ID: #CSR${Date.now()}
           ]
         ]
       }
-    });
+    })
+  } else if (data === 'noop') { // Handle noop (no operation)
+    bot.answerCallbackQuery(query.id)
+    return
   }
-  
-  // Handle noop (no operation)
-  else if (data === 'noop') {
-    bot.answerCallbackQuery(query.id);
-    return;
-  }
-  
+
   // Answer callback query to remove loading state
-  bot.answerCallbackQuery(query.id);
-});
+  bot.answerCallbackQuery(query.id)
+})
 
 // Handle text messages
 bot.on('message', (msg) => {
   if (msg.text && !msg.text.startsWith('/')) {
-    const chatId = msg.chat.id;
-    bot.sendMessage(chatId, 
-      `🏎️ Welcome to CSR2 MODS STORE!\n\n🌐 csr2mod.com\n\nWe have ${carsDatabase.size}+ premium CSR2 cars available!\n\nUse /menu to browse categories or /search [term] to find specific cars! 🏁`, 
+    const chatId = msg.chat.id
+    bot.sendMessage(chatId,
+      `🏎️ Welcome to CSR2 MODS STORE!\n\n🌐 csr2mod.com\n\nWe have ${carsDatabase.size}+ premium CSR2 cars available!\n\nUse /menu to browse categories or /search [term] to find specific cars! 🏁`,
       getMainMenuKeyboard()
-    );
+    )
   }
-});
+})
 
 // Error handling
 bot.on('polling_error', (error) => {
-  console.log('Polling error:', error);
-});
+  console.log('Polling error:', error)
+})
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'ok', 
+  res.status(200).json({
+    status: 'ok',
     timestamp: new Date().toISOString(),
     version: '1.0.0',
     bot: 'CSR2 MODS STORE',
     cars_loaded: carsDatabase.size,
     brands: carsByBrand.size
-  });
-});
+  })
+})
 
 // Initialize and start
-async function startBot() {
-  console.log('🏎️ Starting CSR2 MODS STORE Bot...');
-  
+async function startBot () {
+  console.log('🏎️ Starting CSR2 MODS STORE Bot...')
+
   // Load cars database
-  await loadCarsDatabase();
-  
+  await loadCarsDatabase()
+
   // Start express server
   app.listen(port, () => {
-    console.log(`🏎️ CSR2 MODS STORE Bot V1.0.0 Final is running on port ${port}`);
-    console.log('📡 Polling for messages...');
-    console.log(`🌐 WebApp available at: http://localhost:${port}/webapp`);
-    console.log(`🚗 Cars loaded: ${carsDatabase.size}`);
-    console.log(`🏭 Brands available: ${carsByBrand.size}`);
-  });
-  
-  console.log('🎮 CSR2 MODS STORE Bot V1.0.0 Final started successfully!');
+    console.log(`🏎️ CSR2 MODS STORE Bot V1.0.0 Final is running on port ${port}`)
+    console.log('📡 Polling for messages...')
+    console.log(`🌐 WebApp available at: http://localhost:${port}/webapp`)
+    console.log(`🚗 Cars loaded: ${carsDatabase.size}`)
+    console.log(`🏭 Brands available: ${carsByBrand.size}`)
+  })
+
+  console.log('🎮 CSR2 MODS STORE Bot V1.0.0 Final started successfully!')
 }
 
 // Start the bot
-startBot().catch(console.error);
+startBot().catch(console.error)
