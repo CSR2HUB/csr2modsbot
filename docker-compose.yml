@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  csr2-bot:
+    build: .
+    container_name: csr2-mods-store-bot
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+    env_file:
+      - .env
+    ports:
+      - "8695:8695"
+    volumes:
+      - ./logs:/app/logs
+      - ./assets:/app/assets
+    networks:
+      - csr2-network
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8695/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  redis:
+    image: redis:7-alpine
+    container_name: csr2-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - csr2-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  # Optional: Database (uncomment if needed)
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: csr2-postgres
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_DB: csr2bot
+  #     POSTGRES_USER: csr2user
+  #     POSTGRES_PASSWORD: ${DB_PASSWORD}
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   networks:
+  #     - csr2-network
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U csr2user"]
+  #     interval: 30s
+  #     timeout: 5s
+  #     retries: 3
+
+  # Optional: Monitoring with Prometheus
+  # prometheus:
+  #   image: prom/prometheus
+  #   container_name: csr2-prometheus
+  #   restart: unless-stopped
+  #   command:
+  #     - '--config.file=/etc/prometheus/prometheus.yml'
+  #     - '--storage.tsdb.path=/prometheus'
+  #   volumes:
+  #     - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+  #     - prometheus_data:/prometheus
+  #   ports:
+  #     - "9090:9090"
+  #   networks:
+  #     - csr2-network
+
+volumes:
+  redis_data:
+  # postgres_data:
+  # prometheus_data:
+
+networks:
+  csr2-network:
+    driver: bridge

@@ -1,0 +1,118 @@
+{
+  "name": "csr2-mods-store-bot",
+  "version": "1.0.0",
+  "description": "CSR2 MODS STORE",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "setup": "node scripts/setup.js",
+    "deploy": "bash scripts/deploy.sh",
+    "pm2:start": "pm2 start ecosystem.config.js --env production",
+    "pm2:stop": "pm2 stop csr2-mods-store-bot",
+    "pm2:restart": "pm2 restart csr2-mods-store-bot",
+    "pm2:logs": "pm2 logs csr2-mods-store-bot",
+    "pm2:monitor": "pm2 monit",
+    "docker:build": "docker build -t csr2-mods-store-bot .",
+    "docker:run": "docker run -d --name csr2-bot --env-file .env -p 8695:8695 csr2-mods-store-bot",
+    "docker:stop": "docker stop csr2-bot && docker rm csr2-bot",
+    "docker:logs": "docker logs csr2-bot",
+    "health": "curl -f http://localhost:8695/health || echo 'Health check failed'",
+    "backup": "mkdir -p backups && cp -r src assets package.json backups/backup-$(date +%Y%m%d_%H%M%S)/",
+    "clean": "rm -rf node_modules package-lock.json && npm install",
+    "update": "npm update && npm audit fix"
+  },
+  "dependencies": {
+    "body-parser": "^1.20.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "helmet": "^7.1.0",
+    "morgan": "^1.10.0",
+    "node-telegram-bot-api": "^0.66.0",
+    "papaparse": "^5.5.3",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "eslint-config-standard": "^17.1.0",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-promise": "^6.1.1",
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.0",
+    "supertest": "^6.3.4"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "csr2",
+    "mods",
+    "gaming",
+    "store",
+    "nodejs",
+    "ecommerce",
+    "automation",
+    "racing",
+    "production"
+  ],
+  "author": {
+    "name": "CSR2 MODS STORE",
+    "email": "support@csr2mod.com",
+    "url": "https://csr2mod.com"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CSR2HUB/csr2-mods-store-bot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/CSR2HUB/csr2-mods-store-bot/issues"
+  },
+  "homepage": "https://csr2mod.com",
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "private": false,
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/CSR2HUB"
+  },
+  "config": {
+    "port": 8695,
+    "logLevel": "info"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "collectCoverage": true,
+    "coverageDirectory": "coverage",
+    "coverageReporters": [
+      "text",
+      "lcov",
+      "html"
+    ]
+  },
+  "eslintConfig": {
+    "extends": [
+      "standard"
+    ],
+    "env": {
+      "node": true,
+      "jest": true
+    }
+  }
+}
